@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Resilience – Guangzhou | UGOD</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            /* Theme Variables */
+            --bg-dark: #0b0c10;
+            --sidebar-bg: rgba(15, 15, 20, 0.95);
+            --text-main: #ffffff;
+            --text-muted: #8892b0;
+            --accent-red: #ff4d4d;    /* Low Resilience (Bad) */
+            --accent-blue: #3366ff;   /* High Resilience (Good) */
+            --accent-cyan: #66fcf1;   /* UI Highlight */
+            --border: rgba(255, 255, 255, 0.1);
+            --sidebar-width: 360px;
+        }
+
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: var(--text-main); overflow: hidden; }
+
+        /* ---- 1. Simulation Background (Canvas) ---- */
+        #bg-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; 
+            opacity: 1; transition: opacity 0.8s ease;
+        }
+
+        /* ---- 2. Landing Page ---- */
+        #landing-page {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 3000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* Gradient overlay for text readability */
+            background: radial-gradient(circle at center, rgba(11,12,16,0.7) 0%, #0b0c10 100%);
+            transition: transform 0.8s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        .landing-container {
+            position: relative; z-index: 2; text-align: center; max-width: 900px; padding: 0 20px;
+        }
+
+        .project-tag {
+            font-family: 'Space Mono', monospace; color: var(--accent-cyan); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; display: block;
+            border: 1px solid var(--accent-cyan); display: inline-block; padding: 5px 12px;
+        }
+
+        .main-title {
+            font-size: 56px; font-weight: 300; margin: 0 0 20px 0; letter-spacing: -1px;
+            text-shadow: 0 0 30px rgba(0,0,0,0.5);
+        }
+        
+        .sub-title {
+            font-family: 'Space Mono', monospace; font-size: 14px; color: var(--text-muted); margin-bottom: 40px; line-height: 1.6;
+        }
+
+        .cyber-btn {
+            background: rgba(0,0,0,0.6);
+            color: var(--text-main);
+            border: 1px solid var(--accent-cyan);
+            padding: 16px 45px;
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            backdrop-filter: blur(5px);
+        }
+
+        .cyber-btn:hover { background: var(--accent-cyan); color: var(--bg-dark); box-shadow: 0 0 30px rgba(102, 252, 241, 0.4); }
+        
+        .cyber-btn.secondary { border-color: var(--text-muted); color: var(--text-muted); margin-right: 20px;}
+        .cyber-btn.secondary:hover { border-color: var(--text-main); color: var(--text-main); background: rgba(255,255,255,0.1); box-shadow: none; }
+
+        /* Intro Modal */
+        #intro-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 12, 16, 0.95); z-index: 3500;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.4s;
+        }
+        #intro-modal.active { opacity: 1; pointer-events: all; }
+        
+        .modal-content {
+            max-width: 640px; padding: 50px; border: 1px solid var(--border);
+            background: rgba(20, 20, 25, 1); position: relative;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .close-modal { position: absolute; top: 25px; right: 25px; color: var(--text-muted); cursor: pointer; font-size: 24px; transition:0.2s; }
+        .close-modal:hover { color: white; }
+
+        .modal-text { font-size: 15px; line-height: 1.8; color: #ccc; margin-bottom: 15px; text-align: justify; }
+        .modal-meta {
+            margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);
+            display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+            font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-muted);
+        }
+
+        /* ---- 3. Dashboard Layout ---- */
+        #dashboard {
+            display: flex; height: 100%; width: 100%; opacity: 0; transition: opacity 1s ease 0.5s;
+        }
+
+        #sidebar {
+            width: var(--sidebar-width); background: var(--sidebar-bg);
+            border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 2000;
+            color: var(--text-main); box-shadow: 5px 0 20px rgba(0,0,0,0.2);
+        }
+
+        .sidebar-header { padding: 25px; border-bottom: 1px solid var(--border); }
+        .sidebar-header h2 { margin: 0; font-size: 20px; font-weight: 300; letter-spacing: 1px; }
+        .sidebar-header .sub { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent-cyan); margin-top: 8px; }
+
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 25px; }
+
+        .control-section { margin-bottom: 30px; }
+        .section-title {
+            font-family: 'Space Mono', monospace; font-size: 11px; color: var(--text-muted);
+            text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;
+            border-left: 2px solid var(--accent-cyan); padding-left: 10px;
+        }
+
+        .radio-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 14px; cursor: pointer; color: #ddd; }
+        .radio-item input { margin-right: 10px; accent-color: var(--accent-cyan); }
+
+        select {
+            width: 100%; padding: 10px; background: rgba(0,0,0,0.3); color: white;
+            border: 1px solid var(--border); font-family: 'Inter', sans-serif;
+        }
+
+        #info-panel {
+            background: rgba(255,255,255,0.03); padding: 15px; border-radius: 4px; border: 1px solid var(--border); min-height: 80px;
+        }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; border-bottom: 1px dashed rgba(255,255,255,0.05); padding-bottom: 4px; }
+        .info-row:last-child { border: none; }
+        .info-val { font-family: 'Space Mono', monospace; text-align: right;}
+
+        .sidebar-footer {
+            padding: 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted);
+            background: rgba(0,0,0,0.2);
+        }
+
+        /* Map Area */
+        #map-container { flex: 1; position: relative; background: #0b0c10; }
+        #map { width: 100%; height: 100%; z-index: 0; }
+        .leaflet-container { background: #0b0c10 !important; }
+
+        /* Analytics Drawer */
+        #analytics-toggle {
+            position: absolute; top: 20px; right: 20px; z-index: 1000;
+            background: var(--bg-dark); color: var(--text-main); border: 1px solid var(--border);
+            padding: 10px 20px; font-family: 'Space Mono', monospace; font-size: 12px;
+            cursor: pointer; transition: 0.3s;
+        }
+        #analytics-toggle:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        #analytics-drawer {
+            position: absolute; top: 70px; right: 20px; bottom: 20px; width: 340px;
+            background: rgba(15, 15, 20, 0.95);
+            border: 1px solid var(--border); z-index: 999;
+            transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            color: white; overflow-y: auto;
+        }
+        #analytics-drawer.open { transform: translateX(0); }
+
+        .chart-card { background: rgba(255,255,255,0.02); padding: 15px; border: 1px solid var(--border); margin-bottom: 20px; }
+        .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .kpi-card { background: rgba(102, 252, 241, 0.05); padding: 15px; border: 1px solid rgba(102, 252, 241, 0.1); text-align: center; }
+        .kpi-val { font-size: 24px; font-weight: 700; color: var(--accent-cyan); display: block; font-family: 'Space Mono', monospace; }
+        .kpi-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px; }
+
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0b0c10; z-index: 5000;
+            display: none; justify-content: center; align-items: center; color: var(--accent-cyan);
+        }
+        
+        /* Legend */
+        .legend-item { display: flex; align-items: center; font-size: 12px; margin-bottom: 6px; color: #ccc; }
+        .legend-color { width: 12px; height: 12px; margin-right: 10px; border-radius: 2px; }
+
+    </style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div id="loader"><i class="fas fa-circle-notch fa-spin fa-2x"></i></div>
+
+<div id="intro-modal">
+    <div class="modal-content">
+        <i class="fas fa-times close-modal" onclick="toggleIntro()"></i>
+        <h2 style="font-weight:300; margin-top:0;">Project <span style="color:var(--accent-cyan)">Context</span></h2>
+        
+        <div class="modal-text">
+            This project visualizes the impact of extreme heat on urban vitality in Guangzhou. We leverage <strong>China Unicom Mobile Signaling Data</strong> to analyze human activity patterns at a <strong>150m grid resolution</strong>.
+        </div>
+        <div class="modal-text">
+            The core analysis compares population intensity between two scenarios in <strong>August 2024 (14:00-16:00)</strong>:
+            <ul style="margin: 10px 0; padding-left: 20px; color:#aaa;">
+                <li><strong>Extreme Heat Days:</strong> 5 days with temperatures exceeding 35°C.</li>
+                <li><strong>Baseline Days:</strong> 5 regular weekdays with normal temperatures.</li>
+            </ul>
+        </div>
+        <div class="modal-text">
+            By calculating the ratio of footfall (Heat/Baseline), we determine the "Resilience" of each grid cell.
+            <em>Note: Due to the massive dataset size, this visualization focuses on a sampled specific area of the city.</em>
+        </div>
+
+        <div class="modal-meta">
+            <div>DATA: China Unicom SmartSteps</div>
+            <div>RES: 150m x 150m Grid</div>
+            <div>PERIOD: Aug 2024</div>
+            <div>TARGET: Heat Resilience</div>
+        </div>
+    </div>
+</div>
+
+<section id="landing-page">
+    <div class="landing-container">
+        <span class="project-tag">UGOD Research 2025</span>
+        <h1 class="main-title">Heat Resilience<br>Analytics</h1>
+        <div class="sub-title">
+            VISUALIZING URBAN VITALITY UNDER EXTREME HEAT<br>
+            GUANGZHOU | AUG 2024 | MOBILE SIGNALING DATA
+        </div>
+        <div class="btn-group">
+            <button class="cyber-btn secondary" onclick="toggleIntro()">Project Context</button>
+            <button class="cyber-btn" onclick="enterDashboard()">Explore Map</button>
+        </div>
+    </div>
+</section>
+
+<div id="dashboard">
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <h2>Guangzhou Analytics</h2>
+            <div class="sub">WEEKDAYS 14:00-16:00</div>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="control-section">
+                <div class="section-title">Inspector</div>
+                <div id="info-panel">
+                    <div style="color:var(--text-muted); text-align:center; padding-top:15px; font-size:12px;">
+                        <i class="fas fa-mouse-pointer" style="margin-bottom:5px; display:block;"></i>
+                        Hover map grid for details
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="section-title">Variable Filter</div>
+                <label class="radio-item">
+                    <input type="radio" name="colorVar" value="heat_ratio" checked> 
+                    <span>Resilience Ratio (Heat/Base)</span>
+                </label>
+                <label class="radio-item">
+                    <input type="radio" name="colorVar" value="base_cnt"> 
+                    <span>Baseline Footfall</span>
+                </label>
+                <label class="radio-item">
+                    <input type="radio" name="colorVar" value="heat_cnt"> 
+                    <span>Heat Event Footfall</span>
+                </label>
+            </div>
+
+            <div class="control-section">
+                <div class="section-title">Data Confidence</div>
+                <select id="qualityFilter">
+                    <option value="all">Display All Data</option>
+                    <option value="medium_high">Medium & High Confidence</option>
+                    <option value="high">High Confidence Only</option>
+                </select>
+            </div>
+
+            <div class="control-section">
+                <div class="section-title">Legend</div>
+                <div id="legend-container" class="legend-container"></div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div>&copy; 2025 UGOD Visualization Project</div>
+            <div style="color:#666; margin-top:5px;">Source: Unicom SmartSteps</div>
+        </div>
+    </aside>
+
+    <main id="map-container">
+        <div id="map"></div>
+        <button id="analytics-toggle" onclick="toggleAnalytics()">
+            <i class="fas fa-chart-bar"></i> ANALYTICS
+        </button>
+        <div id="analytics-drawer">
+            <div class="analytics-content" style="padding:25px;">
+                <div class="section-title" style="margin-bottom:20px;">City-wide Statistics</div>
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <span class="kpi-val" id="kpi-avg">-</span>
+                        <span class="kpi-label">Avg Resilience</span>
+                    </div>
+                    <div class="kpi-card" style="background:rgba(255,255,255,0.05); border-color:var(--border);">
+                        <span class="kpi-val" id="kpi-count" style="color:white;">-</span>
+                        <span class="kpi-label">Analysed Grids</span>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="section-title">Distribution</div>
+                    <div style="height:150px"><canvas id="histChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="section-title">Correlation</div>
+                    <div style="height:150px"><canvas id="scatterChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // ---- 1. Grid Analysis Simulation (Canvas) ----
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    let animationId;
+    let grids = [];
+    const gridSize = 20; // Visual size of grid in bg
+    let scanLineY = 0;
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        initGrids();
+    }
+
+    class GridCell {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.baseColor = Math.random() > 0.5 ? '#1a1a2e' : '#16213e'; // Dark blueish base
+            this.activeColor = '#000'; 
+            this.state = 'waiting'; // waiting, scanning, analyzed
+            this.opacity = 0.2;
+            this.resilience = Math.random(); // 0 to 1
+        }
+
+        draw(scanY) {
+            // Check if scan line hits this grid
+            if (Math.abs(scanY - this.y) < 50) {
+                this.state = 'scanning';
+            } else if (scanY > this.y && this.state === 'scanning') {
+                this.state = 'analyzed';
+            }
+
+            if (this.state === 'scanning') {
+                // Flash white/cyan
+                ctx.fillStyle = 'rgba(102, 252, 241, 0.8)';
+            } else if (this.state === 'analyzed') {
+                // Background visual logic (keep abstract)
+                // Red/Blue mix just for visual effect
+                if (this.resilience > 0.6) {
+                    ctx.fillStyle = `rgba(51, 102, 255, ${0.4 * this.resilience})`; // Blue (Good)
+                } else {
+                    ctx.fillStyle = `rgba(255, 77, 77, ${0.4 * (1-this.resilience)})`; // Red (Bad)
+                }
+            } else {
+                ctx.fillStyle = this.baseColor;
+            }
+            
+            ctx.fillRect(this.x, this.y, gridSize - 2, gridSize - 2);
+        }
+    }
+
+    function initGrids() {
+        grids = [];
+        const cols = Math.ceil(canvas.width / gridSize);
+        const rows = Math.ceil(canvas.height / gridSize);
+        for(let r=0; r<rows; r++) {
+            for(let c=0; c<cols; c++) {
+                grids.push(new GridCell(c * gridSize, r * gridSize));
+            }
+        }
+    }
+
+    function animateGrid() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw Scan Line effect
+        scanLineY += 2;
+        if(scanLineY > canvas.height + 100) {
+            scanLineY = -100; // Reset
+            grids.forEach(g => g.state = 'waiting'); // Reset grids
+        }
+
+        grids.forEach(g => g.draw(scanLineY));
+        
+        // Draw scan line
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#66fcf1';
+        ctx.fillStyle = 'rgba(102, 252, 241, 0.5)';
+        ctx.fillRect(0, scanLineY, canvas.width, 2);
+        ctx.shadowBlur = 0;
+
+        animationId = requestAnimationFrame(animateGrid);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    animateGrid(); // Start Animation
+
+    // ---- 2. App Logic ----
+
+    // CHANGED COLOR SCHEME: Red (Bad/Low) -> Blue (Good/High)
+    const CONFIG = {
+        colors: {
+            // Values: <0.7 (Red), 0.7-0.9, 0.9-1.1 (White), 1.1-1.3, >1.3 (Blue)
+            ratio: ['#ff4d4d', '#ffad33', '#fffae6', '#33ccff', '#3366ff'], 
+            count: ['#2c2c2c', '#555', '#888', '#bbb', '#fff']
+        }
+    };
+
+    let state = { allData: [], filteredData: [], colorVar: 'heat_ratio', quality: 'all', histChart: null, scatterChart: null };
+
+    function toggleIntro() {
+        document.getElementById('intro-modal').classList.toggle('active');
+    }
+
+    function enterDashboard() {
+        cancelAnimationFrame(animationId);
+        const cvs = document.getElementById('bg-canvas');
+        cvs.style.opacity = '0';
+        setTimeout(() => cvs.style.display = 'none', 800);
+
+        document.getElementById('landing-page').style.transform = 'translateY(-100%)';
+        const dash = document.getElementById('dashboard');
+        dash.style.opacity = '1';
+        
+        setTimeout(() => {
+            map.invalidateSize();
+            loadData(); 
+        }, 600);
+    }
+
+    function toggleAnalytics() {
+        document.getElementById('analytics-drawer').classList.toggle('open');
+    }
+
+    // Map Setup
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([23.12, 113.26], 11);
+    L.control.zoom({ position: 'topleft' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd' }).addTo(map);
+    const pointLayer = L.layerGroup().addTo(map);
+
+    function getColor(val, type) {
+        if (val === null || isNaN(val)) return '#333';
+        if (type === 'heat_ratio') {
+            if (val < 0.7) return CONFIG.colors.ratio[0]; // Red (Bad)
+            if (val < 0.9) return CONFIG.colors.ratio[1];
+            if (val < 1.1) return CONFIG.colors.ratio[2]; // Neutral
+            if (val < 1.3) return CONFIG.colors.ratio[3];
+            return CONFIG.colors.ratio[4]; // Blue (Good)
+        } else {
+            if (val < 50) return CONFIG.colors.count[0];
+            if (val < 150) return CONFIG.colors.count[1];
+            if (val < 300) return CONFIG.colors.count[2];
+            if (val < 600) return CONFIG.colors.count[3];
+            return CONFIG.colors.count[4];
+        }
+    }
+
+    function loadData() {
+        document.getElementById('loader').style.display = 'flex';
+        Papa.parse('data/heat_resilience_points.csv', {
+            download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
+            complete: function(results) {
+                state.allData = results.data.map(d => ({
+                    ...d,
+                    data_quality: d.data_quality ? d.data_quality.toLowerCase() : ''
+                }));
+                document.getElementById('loader').style.display = 'none';
+                applyFilter(true);
+            },
+            error: function() { document.getElementById('loader').innerHTML = 'Data Load Error'; }
+        });
+    }
+
+    function applyFilter(shouldFitBounds = false) {
+        state.filteredData = state.allData.filter(d => {
+            if (!d.centroid_lat || !d.centroid_lon) return false;
+            if (state.quality === 'medium_high' && !['medium','high'].includes(d.data_quality)) return false;
+            if (state.quality === 'high' && d.data_quality !== 'high') return false;
+            return true;
+        });
+        updateMap(shouldFitBounds);
+        updateLegend();
+        updateAnalytics();
+    }
+
+    function updateMap(shouldFitBounds) {
+        pointLayer.clearLayers();
+        const markers = [];
+        const bounds = L.latLngBounds();
+
+        state.filteredData.forEach(d => {
+            const val = d[state.colorVar];
+            const color = getColor(val, state.colorVar);
+            
+            // INCREASED TRANSPARENCY: fillOpacity 0.6
+            const m = L.circleMarker([d.centroid_lat, d.centroid_lon], {
+                radius: 3, 
+                fillColor: color, 
+                color: 'transparent', 
+                weight: 0, 
+                fillOpacity: 0.6 
+            });
+            bounds.extend([d.centroid_lat, d.centroid_lon]);
+            m.on('mouseover', () => {
+                m.setStyle({ radius: 8, fillOpacity: 1, color: '#fff', weight: 1 });
+                showInfo(d);
+            });
+            m.on('mouseout', () => {
+                m.setStyle({ radius: 3, fillOpacity: 0.6, color: 'transparent', weight: 0 });
+            });
+            markers.push(m);
+        });
+        markers.forEach(m => m.addTo(pointLayer));
+        if (shouldFitBounds && markers.length > 0) map.fitBounds(bounds, { padding: [50, 50] });
+    }
+
+    function showInfo(d) {
+        const p = document.getElementById('info-panel');
+        const color = getColor(d.heat_ratio, 'heat_ratio');
+        
+        p.innerHTML = `
+            <div class="info-row">
+                <span style="color:#888">GRID ID</span> 
+                <span class="info-val">${d.grid_id}</span>
+            </div>
+            <div class="info-row">
+                <span style="color:#888">RESILIENCE</span> 
+                <span class="info-val" style="color:${color}; font-size:14px; font-weight:700;">
+                    ${d.heat_ratio?.toFixed(2)}
+                </span>
+            </div>
+            <div class="info-row">
+                <span style="color:#888">BASE FOOTFALL</span> 
+                <span class="info-val">${d.base_cnt}</span>
+            </div>
+            <div class="info-row">
+                <span style="color:#888">HEAT FOOTFALL</span> 
+                <span class="info-val" style="color:#ff4d4d">${d.heat_cnt}</span>
+            </div>
+        `;
+    }
+
+    function updateLegend() {
+        const container = document.getElementById('legend-container');
+        let html = '';
+        if (state.colorVar === 'heat_ratio') {
+            const items = [
+                { l: '< 0.7 (Low/Bad)', c: CONFIG.colors.ratio[0] }, // Red
+                { l: '0.7 - 0.9', c: CONFIG.colors.ratio[1] },
+                { l: '0.9 - 1.1 (Stable)', c: CONFIG.colors.ratio[2] }, // Neutral
+                { l: '1.1 - 1.3', c: CONFIG.colors.ratio[3] },
+                { l: '> 1.3 (High/Good)', c: CONFIG.colors.ratio[4] }  // Blue
+            ];
+            items.forEach(i => html += `<div class="legend-item"><div class="legend-color" style="background:${i.c}"></div>${i.l}</div>`);
+        } else {
+             const items = [
+                { l: '< 50', c: CONFIG.colors.count[0] },
+                { l: '50 - 150', c: CONFIG.colors.count[1] },
+                { l: '150 - 300', c: CONFIG.colors.count[2] },
+                { l: '300 - 600', c: CONFIG.colors.count[3] },
+                { l: '> 600', c: CONFIG.colors.count[4] }
+            ];
+            items.forEach(i => html += `<div class="legend-item"><div class="legend-color" style="background:${i.c}"></div>${i.l}</div>`);
+        }
+        container.innerHTML = html;
+    }
+
+    // Charts
+    Chart.defaults.color = '#8892b0';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.1)';
+
+    function updateAnalytics() {
+        const data = state.filteredData;
+        const validRatios = data.map(d => d.heat_ratio).filter(v => v != null);
+        const avg = validRatios.length ? (validRatios.reduce((a,b)=>a+b, 0) / validRatios.length) : 0;
+        
+        document.getElementById('kpi-avg').innerText = avg.toFixed(2);
+        document.getElementById('kpi-count').innerText = data.length.toLocaleString();
+
+        updateHistChart(validRatios);
+        updateScatterChart(data);
+    }
+
+    function updateHistChart(values) {
+        const ctx = document.getElementById('histChart').getContext('2d');
+        const bins = new Array(20).fill(0);
+        values.forEach(v => {
+            if(v > 2) return;
+            const idx = Math.floor(v * 10);
+            if(bins[idx] !== undefined) bins[idx]++;
+        });
+        const labels = bins.map((_, i) => (i/10).toFixed(1));
+        const colors = labels.map(v => getColor(parseFloat(v), 'heat_ratio'));
+
+        if(state.histChart) state.histChart.destroy();
+        state.histChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labels, datasets: [{ data: bins, backgroundColor: colors }] },
+            options: { plugins: { legend: { display: false } }, scales: { x: { display: true }, y: { display: false } }, maintainAspectRatio: false }
+        });
+    }
+
+    function updateScatterChart(data) {
+        const ctx = document.getElementById('scatterChart').getContext('2d');
+        const points = data
+            .filter(d => d.base_cnt > 0 && d.heat_ratio < 2.5)
+            .map(d => ({ x: Math.log10(d.base_cnt), y: d.heat_ratio }));
+
+        if(state.scatterChart) state.scatterChart.destroy();
+        state.scatterChart = new Chart(ctx, {
+            type: 'scatter',
+            data: { datasets: [{ data: points, backgroundColor: 'rgba(51, 204, 255, 0.4)', pointRadius: 2, borderWidth:0 }] },
+            options: { plugins: { legend: { display: false } }, scales: { x: { title:{display:true, text:'Log(Flow)'} }, y: { title:{display:true, text:'Resilience'} } }, maintainAspectRatio: false }
+        });
+    }
+
+    document.querySelectorAll('input[name="colorVar"]').forEach(el => {
+        el.addEventListener('change', (e) => { state.colorVar = e.target.value; applyFilter(); });
+    });
+    document.getElementById('qualityFilter').addEventListener('change', (e) => {
+        state.quality = e.target.value; applyFilter();
+    });
+
+</script>
+</body>
+</html>
